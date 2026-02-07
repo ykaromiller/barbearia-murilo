@@ -646,6 +646,13 @@
     </footer>
 
     <script>
+        // ===== CONFIGURAÇÃO DO BARBEIRO - ALTERE AQUI =====
+        const BARBER_CONFIG = {
+            username: 'Murilo',         // Usuário do barbeiro
+            password: 'mucortes171'     // Senha do barbeiro
+        };
+        // ==================================================
+
         // Database Storage usando localStorage
         const DB = {
             users: 'barber_users',
@@ -749,10 +756,10 @@
             const username = document.getElementById('loginUsername').value.trim();
             const password = document.getElementById('loginPassword').value;
 
-            // Credenciais do barbeiro (pode ser alterado)
-            if (username === 'admin' && password === 'admin123') {
+            // Usando as credenciais configuradas no topo do arquivo
+            if (username === BARBER_CONFIG.username && password === BARBER_CONFIG.password) {
                 const barber = {
-                    username: 'admin',
+                    username: BARBER_CONFIG.username,
                     isBarber: true
                 };
                 localStorage.setItem(DB.currentUser, JSON.stringify(barber));
