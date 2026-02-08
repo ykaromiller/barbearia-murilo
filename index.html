@@ -1112,7 +1112,11 @@
                         <h3>${apt.date.toLocaleDateString('pt-BR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</h3>
                         <p>Horário: ${apt.date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</p>
                     </div>
-                    ${!isPast && canCancel(apt.date) ? `<button class="btn btn-secondary" onclick="cancelAppointment('${apt.id}')">Cancelar</button>` : ''}
+                    ${!isPast && (isBarber() || canCancel(apt.date)) ? `<button class="btn btn-secondary" onclick="cancelAppointment('${apt.id}')">Cancelar</button>` : ''}${!isPast && (isBarber() || canCancel(apt.date)) ? `<button class="btn btn-secondary" onclick="cancelAppointment('${apt.id}')">Cancelar</button>` : ''}
+                    function isBarber() {
+                    const currentUser = JSON.parse(sessionStorage.getItem(SESSION.currentUser) || 'null');
+                        return currentUser && currentUser.isBarber === true;
+        }    
                 </div>
             `).join('');
         }
