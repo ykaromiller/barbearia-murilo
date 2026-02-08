@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Barbearia Murilo</title>
+<style>
+body{font-family:Arial;background:#111;color:#fff;margin:0;padding:0}
+.container{max-width:500px;margin:40px auto;background:#1c1c1c;padding:20px;border-radius:10px}
+input,button{width:100%;padding:10px;margin:5px 0;border-radius:5px;border:none}
+button{background:#ff3c00;color:#fff;font-weight:bold;cursor:pointer}
+button:hover{background:#ff5c2a}
+.hidden{display:none}
+</style>
+</head>
+<body>
+
+<div class="container" id="loginBox">
+<h2>Login / Cadastro</h2>
+<input type="text" id="username" placeholder="Usuário">
+<input type="password" id="password" placeholder="Senha">
+<button onclick="login()">Entrar</button>
+<button onclick="register()">Criar Conta</button>
+<button onclick="barberAccess()">Acesso do Barbeiro</button>
+<p id="msg"></p>
+</div>
+
+<div class="container hidden" id="agendamentoBox">
+<h2>Agendar Horário</h2>
+<input type="date" id="date">
+<input type="time" id="time">
+<button onclick="agendar()">Agendar</button>
+<button onclick="logout()">Sair</button>
+</div>
+
+<div class="container hidden" id="barberBox">
+<h2>Painel do Barbeiro</h2>
+<div id="lista"></div>
+<button onclick="logout()">Sair</button>
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getDatabase, ref, set, get, child, push, onValue } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+
+const firebaseConfig = {
+  apiKey: "SUA_API_KEY",
+  authDomain: "SEU_AUTH_DOMAIN",
+  databaseURL: "SEU_DATABASE_URL",
+  projectId: "SEU_PROJECT_ID",
+  storageBucket: "SEU_STORAGE_BUCKET",
+  messagingSenderId: "SEU_SENDER_ID",
+  appId: "SEU_APP_ID"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getDatabase(app);
+
+let currentUser = null;
+
+window.register = async function(){
+  const user = username.value;
+  const pass = password.value;
+  if(!user || !pass) return msg.innerText="Preencha tudo";
+
+  await set(ref(db,"users/"+user),{
+    username:user,
+    password:pass,
+    role:"cliente"
+  });
+
+  msg.innerText="Conta criada!";
+}
+
+window.login = async function(){
+  const user = username.value;
+  const pass = password.value;
+
+  const snapshot = await get(child(ref(db),"users/"+user));
+
+  if(snapshot.exists()){
+    const data = snapshot.val();
+    if(data.password===pass){
+      currentUser=data;
+      loginBox.classList.add("hidden");
+      agendamentoBox.classList.remove("hidden");
+    }else{
+      msg.innerText="Senha incorreta";
+    }
+  }else{
+    msg.innerText="Usuário não existe";
+  }
+}
+
+window.barberAccess = async function(){
+  const user = username.value;
+  const pass = password.value;
+
+  const snapshot = await get(child(ref(db),"users/"+user));
+
+  if(snapshot.exists()){
+    const data = snapshot.val();
+    if(data.password===pass && data.role==="barbeiro"){
+      loginBox.classList.add("hidden");
+      barberBox.classList.remove("hidden");
+      carregarAgendamentos();
+    }else{
+      msg.innerText="Sem permissão de barbeiro";
+    }
+  }
+}
+
+window.agendar = async function(){
+  const date = document.getElementById("date").value;
+  const time = document.getElementById("time").value;
+
+  if(!date||!time) return;
+
+  const newRef = push(ref(db,"appointments"));
+
+  await set(newRef,{
+    user:currentUser.username,
+    date:date,
+    time:time
+  });
+
+  alert("Agendado!");
+}
+
+function carregarAgendamentos(){
+  const lista = document.getElementById("lista");
+  onValue(ref(db,"appointments"),(snapshot)=>{
+    lista.innerHTML="";
+    snapshot.forEach(child=>{
+      const a=child.val();
+      lista.innerHTML+=`<p>${a.user} - ${a.date} ${a.time}</p>`;
+    });
+  });
+}
+
+window.logout=function(){
+  location.reload();
+}
+
+</script>
+
+</body>
+</html>
