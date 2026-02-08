@@ -549,6 +549,7 @@
             <div class="nav-tabs">
                 <button class="tab active" onclick="showBarberTab('daily')">Visualização Diária</button>
                 <button class="tab" onclick="showBarberTab('monthly')">Visualização Mensal</button>
+                <button class="tab" onclick="showBarberTab('bookForClient')">Agendar para Cliente</button>
                 <button class="tab" onclick="showBarberTab('settings')">Configurações</button>
             </div>
 
@@ -576,6 +577,42 @@
                         </div>
                     </div>
                     <div class="appointments-list" id="monthlyAppointments"></div>
+                </div>
+            </div>
+
+            <!-- Book for Client Tab - NOVA FUNCIONALIDADE -->
+            <div id="bookForClientTab" class="tab-content" style="display: none;">
+                <div class="card">
+                    <h2>Agendar para Cliente</h2>
+                    <p style="color: var(--text-secondary); margin-bottom: 1.5rem;">
+                        Faça agendamentos para clientes que não conseguem usar o sistema online.
+                    </p>
+                    <div id="barberBookingAlert"></div>
+                    
+                    <div class="form-group">
+                        <label>Nome do Cliente</label>
+                        <input type="text" id="barberClientName" placeholder="Digite o nome completo do cliente">
+                    </div>
+
+                    <div class="month-selector">
+                        <h3 id="barberBookingMonth"></h3>
+                        <div class="month-controls">
+                            <button class="btn btn-secondary" onclick="changeBarberBookingMonth(-1)">← Anterior</button>
+                            <button class="btn btn-secondary" onclick="changeBarberBookingMonth(1)">Próximo →</button>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Escolha o Dia</label>
+                        <div class="calendar" id="barberCalendar"></div>
+                    </div>
+
+                    <div class="form-group" id="barberTimeSlotsContainer" style="display: none;">
+                        <label>Escolha o Horário</label>
+                        <div class="time-slots" id="barberTimeSlots"></div>
+                    </div>
+
+                    <button class="btn btn-primary" onclick="confirmBarberBooking()" style="width: 100%; margin-top: 1rem;">Confirmar Agendamento</button>
                 </div>
             </div>
 
@@ -834,6 +871,7 @@
 
             document.getElementById('dailyTab').style.display = 'none';
             document.getElementById('monthlyTab').style.display = 'none';
+            document.getElementById('bookForClientTab').style.display = 'none';
             document.getElementById('settingsTab').style.display = 'none';
 
             if (tab === 'daily') {
@@ -842,6 +880,9 @@
             } else if (tab === 'monthly') {
                 document.getElementById('monthlyTab').style.display = 'block';
                 loadMonthlyAppointments();
+            } else if (tab === 'bookForClient') {
+                document.getElementById('bookForClientTab').style.display = 'block';
+                loadBarberBookingCalendar();
             } else {
                 document.getElementById('settingsTab').style.display = 'block';
             }
@@ -1145,6 +1186,160 @@
             localStorage.setItem(DB.settings, JSON.stringify(settings));
             showAlert('settingsAlert', 'Configurações salvas com sucesso!', 'success');
         }
+
+        // ===== NOVAS FUNÇÕES PARA AGENDAMENTO PELO BARBEIRO =====
+        let barberBookingDate = new Date();
+        let barberSelectedDate = null;
+        let barberSelectedTime = null;
+
+        function loadBarberBookingCalendar() {
+            const calendar = document.getElementById('barberCalendar');
+            const settings = JSON.parse(localStorage.getItem(DB.settings));
+            
+            const year = barberBookingDate.getFullYear();
+            const month = barberBookingDate.getMonth();
+            
+            document.getElementById('barberBookingMonth').textContent = 
+                barberBookingDate.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+
+            const firstDay = new Date(year, month, 1);
+            const lastDay = new Date(year, month + 1, 0);
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+
+            calendar.innerHTML = '';
+
+            for (let day = 1; day <= lastDay.getDate(); day++) {
+                const date = new Date(year, month, day);
+                const dayOfWeek = date.getDay();
+                const isPast = date < today;
+                const isWorkingDay = settings.workingDays.includes(dayOfWeek);
+
+                const dayCard = document.createElement('div');
+                dayCard.className = 'day-card';
+                
+                if (isPast || !isWorkingDay) {
+                    dayCard.classList.add('disabled');
+                }
+
+                dayCard.innerHTML = `
+                    <div style="font-size: 1.2rem; font-weight: bold;">${day}</div>
+                    <div style="font-size: 0.8rem; color: var(--text-secondary);">
+                        ${date.toLocaleDateString('pt-BR', { weekday: 'short' })}
+                    </div>
+                `;
+
+                if (!isPast && isWorkingDay) {
+                    dayCard.onclick = () => selectBarberDate(date, dayCard);
+                }
+
+                calendar.appendChild(dayCard);
+            }
+        }
+
+        function selectBarberDate(date, element) {
+            document.querySelectorAll('#barberCalendar .day-card').forEach(d => d.classList.remove('selected'));
+            element.classList.add('selected');
+            barberSelectedDate = date;
+            barberSelectedTime = null;
+            loadBarberTimeSlots(date);
+        }
+
+        function loadBarberTimeSlots(date) {
+            const container = document.getElementById('barberTimeSlotsContainer');
+            const slotsDiv = document.getElementById('barberTimeSlots');
+            const settings = JSON.parse(localStorage.getItem(DB.settings));
+            const appointments = JSON.parse(localStorage.getItem(DB.appointments));
+
+            container.style.display = 'block';
+            slotsDiv.innerHTML = '';
+
+            const [startHour, startMin] = settings.startTime.split(':').map(Number);
+            const [endHour, endMin] = settings.endTime.split(':').map(Number);
+            const slotDuration = settings.slotDuration;
+
+            const startMinutes = startHour * 60 + startMin;
+            const endMinutes = endHour * 60 + endMin;
+
+            for (let minutes = startMinutes; minutes < endMinutes; minutes += slotDuration) {
+                const hour = Math.floor(minutes / 60);
+                const min = minutes % 60;
+                const timeStr = `${String(hour).padStart(2, '0')}:${String(min).padStart(2, '0')}`;
+
+                const slotDate = new Date(date);
+                slotDate.setHours(hour, min, 0, 0);
+
+                const isBooked = appointments.some(apt => {
+                    const aptDate = new Date(apt.date);
+                    return aptDate.getTime() === slotDate.getTime();
+                });
+
+                const isPast = slotDate < new Date();
+
+                const slot = document.createElement('div');
+                slot.className = 'time-slot';
+                slot.textContent = timeStr;
+
+                if (isBooked || isPast) {
+                    slot.classList.add('booked');
+                } else {
+                    slot.onclick = () => selectBarberTime(timeStr, slot);
+                }
+
+                slotsDiv.appendChild(slot);
+            }
+        }
+
+        function selectBarberTime(time, element) {
+            document.querySelectorAll('#barberTimeSlots .time-slot').forEach(s => s.classList.remove('selected'));
+            element.classList.add('selected');
+            barberSelectedTime = time;
+        }
+
+        function confirmBarberBooking() {
+            const clientName = document.getElementById('barberClientName').value.trim();
+            
+            if (!clientName) {
+                showAlert('barberBookingAlert', 'Por favor, digite o nome do cliente', 'error');
+                return;
+            }
+
+            if (!barberSelectedDate || !barberSelectedTime) {
+                showAlert('barberBookingAlert', 'Por favor, selecione um dia e horário', 'error');
+                return;
+            }
+
+            const [hour, min] = barberSelectedTime.split(':').map(Number);
+            const appointmentDate = new Date(barberSelectedDate);
+            appointmentDate.setHours(hour, min, 0, 0);
+
+            const appointment = {
+                id: Date.now(),
+                username: clientName,
+                date: appointmentDate.toISOString(),
+                createdAt: new Date().toISOString(),
+                bookedByBarber: true
+            };
+
+            const appointments = JSON.parse(localStorage.getItem(DB.appointments));
+            appointments.push(appointment);
+            localStorage.setItem(DB.appointments, JSON.stringify(appointments));
+
+            showAlert('barberBookingAlert', `Agendamento confirmado para ${clientName}!`, 'success');
+            
+            // Limpar campos
+            document.getElementById('barberClientName').value = '';
+            barberSelectedDate = null;
+            barberSelectedTime = null;
+            loadBarberBookingCalendar();
+            document.getElementById('barberTimeSlotsContainer').style.display = 'none';
+        }
+
+        function changeBarberBookingMonth(direction) {
+            barberBookingDate.setMonth(barberBookingDate.getMonth() + direction);
+            loadBarberBookingCalendar();
+        }
+        // ===== FIM DAS NOVAS FUNÇÕES =====
 
         // Initialize
         window.onload = function() {
